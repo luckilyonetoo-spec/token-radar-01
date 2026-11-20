@@ -185,6 +185,8 @@ export class SnapshotError extends Error {
   }
 }
 
+import { scoreSignals } from './signals.ts';
+
 const DAY_MS = 86_400_000;
 const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 
@@ -209,21 +211,17 @@ export function impliedValue(
   model: ModelConstants,
 ): { implied: number; growthPct: number; growthMult: number; maturityMult: number; breadthMult: number; velocityMult: number; tvlPerDay: number; age: number | null } {
   const age = ageDays(asOf, protocol.listed_at);
-  const rawGrowth = finite(protocol.change_7d, 0);
-  const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
-  const growthMult = 1 + (growthPct / 100) * model.growth_weight;
-  const ageForModel = age ?? model.unknown_age_days;
-  const maturityMult =
-    model.maturity_floor +
-    (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
-  const extraChains = Math.min(Math.max(protocol.chains.length - 1, 0), model.breadth_max_chains);
-  const breadthMult = 1 + extraChains * model.breadth_per_chain;
-  const tvlPerDay = protocol.tvl_usd / Math.max(ageForModel, model.min_age_days);
-  const velocityMult =
-    1 + Math.min(model.velocity_cap, Math.max(model.velocity_floor, (tvlPerDay - model.velocity_baseline) / model.velocity_scale));
-  const base = protocol.tvl_usd * model.base_multiple;
-  const implied = Math.max(1, Math.round(base * growthMult * maturityMult * breadthMult * velocityMult));
-  return { implied, growthPct, growthMult, maturityMult, breadthMult, velocityMult, tvlPerDay: Math.round(tvlPerDay), age };
+  const scored = scoreSignals(protocol.tvl_usd, protocol.change_7d, age, protocol.chains.length, model);
+  return {
+    implied: scored.implied,
+    growthPct: scored.growthPct,
+    growthMult: scored.growthMult,
+    maturityMult: scored.maturityMult,
+    breadthMult: scored.breadthMult,
+    velocityMult: scored.velocityMult,
+    tvlPerDay: scored.tvlPerDay,
+    age: scored.age,
+  };
 }
 
 /** DefiLlama's version-marker rule: a name ending in a release is a pool of another protocol. */
